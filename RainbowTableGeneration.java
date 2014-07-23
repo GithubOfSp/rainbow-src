@@ -80,6 +80,6 @@ public class RainbowTableGeneration {
 	{
 //		RainbowChainWalk rcw = new RainbowChainWalk("ntlm", "alpha#1#numeric#3#loweralpha#1#all#1", 0);
 //		System.out.println(RainbowCalcTools.successRate2(rcw.plainSpaceTotal, 20000, 5000, 4));
-		rainbowTableGenerate("md5", "alpha#1#numeric#3#loweralpha#1#all#1", 4, 5000, 20000);
+		rainbowTableGenerate("ntlm", "alpha-numeric-space#1-3", 1, 1000, 4000);
 	}
 }

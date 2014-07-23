@@ -106,7 +106,7 @@ public class RainbowChainWalk {
 			}
 			plainLenMin[i] = Integer.valueOf(plainLenParse[0]);
 			plainLenMax[i] = plainLenParse.length==2?Integer.valueOf(plainLenParse[1]):plainLenMin[i];
-			plainSpaceUpToX[i] = new long[plainLenMax[i]+1];
+			plainSpaceUpToX[i] = new long[plainLenMax[i]-plainLenMin[i]+1];
 		}
 		if(FixedPlainLen==true)
 		{
@@ -150,16 +150,13 @@ public class RainbowChainWalk {
 		}
 		for(int i=0; i<this.charset.length; i++)
 		{
-			for(int j=plainLenMin[i]; j<=plainLenMax[i]; j++)
+			long spaceSize = (long)Math.pow(this.charset[i].length, plainLenMin[i]);
+			for(int j=plainLenMin[i]; j<plainLenMax[i]; j++)
 			{
-				long temp = 1;
-				for(int k=0; k<j; k++)
-				{
-					temp *= this.charset[i].length;
-				}
-				plainSpaceUpToX[i][j] = plainSpaceUpToX[i][j-1] + temp;				
+				plainSpaceUpToX[i][j-plainLenMin[i]+1] = plainSpaceUpToX[i][j-plainLenMin[i]]+spaceSize;
+				spaceSize *= this.charset[i].length;
 			}
-			partPlainSpaceTotal[i] = plainSpaceUpToX[i][plainLenMax[i]];
+			partPlainSpaceTotal[i] = plainSpaceUpToX[i][plainLenMax[i]-plainLenMin[i]]+spaceSize;
 		}
 		plainSpaceTotal = 1;
 		for(long i:partPlainSpaceTotal)
@@ -170,14 +167,14 @@ public class RainbowChainWalk {
 
 	byte[] primaryIndexToPlain(int part, long index) {
 		int plainLen = 0;
-		for (plainLen = plainLenMax[part]; plainLen >= plainLenMin[part]; plainLen--)
+		for (plainLen = plainLenMax[part]; plainLen > plainLenMin[part]; plainLen--)
 		{
-			if (index >= plainSpaceUpToX[part][plainLen-1])
+			if (index >= plainSpaceUpToX[part][plainLen-plainLenMin[part]])
 			{
 				break;
 			}
 		}
-		index -= plainSpaceUpToX[part][plainLen-1]; 
+		index -= plainSpaceUpToX[part][plainLen-plainLenMin[part]]; 
 		byte[] plain = new byte[plainLen];
 		for (int a = plainLen - 1; a >= 0; a--) {
 			plain[a] = charset[part][(int)(index % charset[part].length)];
@@ -360,14 +357,14 @@ public class RainbowChainWalk {
 //		long start = System.currentTimeMillis();
 //		rainbowTableGenerate("md5","loweralpha#3#numeric#2",0,2400,10000);
 
-		RainbowChainWalk rcw = new RainbowChainWalk("ntlm","numeric#3",0);
-		int chainLen = 11;
-		int chainCnt = 100;
+		RainbowChainWalk rcw = new RainbowChainWalk("ntlm","numeric#3#loweralpha#0-1",0);
+		int chainLen = 101;
+		int chainCnt = 1000;
 		
 //		long[][] rainbowTable = RainbowCrack.loadRainbowTable("ntlm_alpha#1-2#numeric#1-3_0_1000x20000.rtE");
 //		rcw = new RainbowChainWalk("sha1", "loweralpha#2#numeric#1#mixalpha-numeric-all-space#1", 0);
 		long[][] rainbowTable = rcw.getRainbowTable(chainLen, chainCnt, true, false);
-		rcw.showMatrix(rainbowTable, chainLen);
+//		rcw.showMatrix(rainbowTable, chainLen);
 //		
 		System.out.println("TotalSpace: "+rcw.plainSpaceTotal);
 		System.out.println("WorkFactor: "+(double)(chainLen-1)*chainCnt/rcw.plainSpaceTotal);
@@ -375,7 +372,7 @@ public class RainbowChainWalk {
 		System.out.println("Success Rate: "+RainbowCalcTools.successRate2(rcw.plainSpaceTotal, chainCnt, chainLen, 1));
 //		
 		int count = 0;
-		BufferedReader file = new BufferedReader(new FileReader("ntlm_hash_numeric#3.txt"));
+		BufferedReader file = new BufferedReader(new FileReader("ntlm_hash_numeric#3#loweralpha#0-1.txt"));
 		String hash = file.readLine();
 		while(hash!=null){
 			String plain = rcw.recover(rainbowTable, chainLen, hash);
@@ -395,6 +392,7 @@ public class RainbowChainWalk {
 //		RainbowCrack.rainbowCrack("md5_loweralpha#2#numeric#2_3_200x200.rtE", "md5Hash.txt");
 //		RainbowCrack.rainbowCrack("md5_loweralpha#2#numeric#2_4_200x200.rtE", "md5Hash.txt");
 	
+		
 		
 //		System.out.println("time: "+(System.currentTimeMillis()-start));
 		
