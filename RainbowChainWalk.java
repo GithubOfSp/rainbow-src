@@ -2,6 +2,7 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -36,7 +37,15 @@ public class RainbowChainWalk {
 	static final String mixalpha_numeric_symbol32_space= "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_+=~`[]{}|\\:;\"\'<>,.?/ ";
 	static final String mixalpha_numeric_all_space= "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_+=~`[]{}|\\:;\"\'<>,.?/ ";
 
-	static byte[] getCharsetBytes(String charset)
+	static class NoSuchCharsetException extends Exception
+	{
+		public NoSuchCharsetException(String msg)
+		{
+			super(msg);
+		}
+	}
+	
+	static byte[] getCharsetBytes(String charset) throws Exception
 	{
 		if(charset.equalsIgnoreCase("alpha")) return alpha.getBytes();
 	    else if(charset.equalsIgnoreCase("alpha-space")) return alpha_space.getBytes();
@@ -67,10 +76,11 @@ public class RainbowChainWalk {
 	    else if(charset.equalsIgnoreCase("mixalpha-numeric-all")) return mixalpha_numeric_all.getBytes();
 	    else if(charset.equalsIgnoreCase("mixalpha-numeric-symbol32-space")) return mixalpha_numeric_symbol32_space.getBytes();
 	    else if(charset.equalsIgnoreCase("mixalpha-numeric-all-space")) return mixalpha_numeric_all_space.getBytes();
-	    else return null;		
+	    else throw new NoSuchCharsetException(charset);
 	}
 	     
 	boolean FixedPlainLen = true;
+	boolean MixedCharset = false;
 	byte[][] charset = null;
 	byte[][] charsetFixed = null;
 	int[] plainLenMin = null;
@@ -86,9 +96,30 @@ public class RainbowChainWalk {
 	long index;
 	byte[] plain;
 	byte[] hash;
-
-	void setCharset(String charset)
+	
+	RainbowChainWalk(String alg, String charset, int tableIndex) throws Exception
 	{
+		this.alg = alg;
+		if(!alg.equalsIgnoreCase("ntlm")) 
+		{
+			digest = MessageDigest.getInstance(alg);
+		}
+		setCharset(charset);
+		this.tableIndex = tableIndex;
+		if(MixedCharset)
+			calcPlainSpaceTotal_Mixed();
+		else calcPlainSpaceTotal();
+	}
+	
+	void setCharset(String charset) throws Exception
+	{
+		if(charset.startsWith("("))
+		{
+			if(!charset.endsWith(")")) throw new Exception("charset format error, \""+charset+"\"");
+			MixedCharset = true;
+			FixedPlainLen = false;
+			charset = charset.substring(1, charset.length()-1);
+		}
 		String[] charsetParse = charset.split("#");
 		int parts = charsetParse.length/2;
 		this.charset = new byte[parts][];
@@ -126,18 +157,6 @@ public class RainbowChainWalk {
 		}
 	}
 	
-	RainbowChainWalk(String alg, String charset, int tableIndex) throws NoSuchAlgorithmException
-	{
-		this.alg = alg;
-		if(!alg.equalsIgnoreCase("ntlm")) 
-		{
-			digest = MessageDigest.getInstance(alg);
-		}
-		setCharset(charset);
-		this.tableIndex = tableIndex;
-		calcPlainSpaceTotal();
-	}
-	
 	void calcPlainSpaceTotal() {
 		if(FixedPlainLen==true)
 		{
@@ -164,6 +183,68 @@ public class RainbowChainWalk {
 			plainSpaceTotal *= i;
 		}
 	}
+	
+	byte[][] mixedCharsetTable;
+	void calcPlainSpaceTotal_Mixed()//assume there is no duplicates in charsets
+	{
+		//initial table
+		int tableSize = 1;
+		for(int i=0; i<charset.length; i++) tableSize *= plainLenMax[i]-plainLenMin[i]+1;
+		mixedCharsetTable = new byte[tableSize+1][];
+		mixedCharsetTable[0] = new byte[charset.length+8];
+		int tableIndex = 1;
+		
+		//initial combination
+		int[] plainLength = new int[charset.length];
+		long[] spaceSize = new long[charset.length];
+		for(int i=0; i<plainLength.length; i++)
+		{
+			plainLength[i] = plainLenMin[i];
+			spaceSize[i] = (long)Math.pow(charset[i].length, plainLength[i]);
+		}
+		plainSpaceTotal = 0;
+		
+		//combination of different plain length
+		boolean hasNext = true;
+		while(hasNext)//loop tableSize times
+		{
+			//calculate plain space size of current combination
+			long totalSize = 1;
+			for(long l:spaceSize) totalSize *= l;
+			int n = plainLength[0];
+			for(int i=1; i<plainLength.length; i++)
+			{
+				int m = plainLength[i];
+				n += m;
+				int com = RainbowCalcTools.combination(m, n);
+				totalSize *= com;
+			}
+			plainSpaceTotal += totalSize;
+
+			//fill in a row of table: total plain space + each plain length of current combination
+			mixedCharsetTable[tableIndex] = new byte[8+plainLength.length];
+			System.arraycopy(ByteBuffer.allocate(8).putLong(plainSpaceTotal).array(), 0, mixedCharsetTable[tableIndex], 0, 8);
+			for(int i=0; i<plainLength.length; i++) mixedCharsetTable[tableIndex][i+8] = (byte)plainLength[i];
+			tableIndex++;
+			
+			//renew combination
+			for(int i=0; i<plainLength.length; i++)
+			{
+				if(plainLength[i]==plainLenMax[i])
+				{
+					if(i==plainLength.length-1) hasNext = false;
+					plainLength[i] = plainLenMin[i];
+					spaceSize[i] = (long)Math.pow(charset[i].length, plainLenMin[i]);
+				}
+				else
+				{
+					plainLength[i]++;
+					spaceSize[i] *= charset[i].length;
+					break;
+				}
+			}
+		}
+	}
 
 	byte[] primaryIndexToPlain(int part, long index) {
 		int plainLen = 0;
@@ -185,7 +266,8 @@ public class RainbowChainWalk {
 	
 	void indexToPlain()
 	{
-		if(FixedPlainLen==true)
+		if(MixedCharset) indexToPlain_Mixed();
+		else if(FixedPlainLen==true)
 		{
 			plain = new byte[charsetFixed.length];
 			for(int i=plain.length-1; i>=0; i--)
@@ -217,6 +299,87 @@ public class RainbowChainWalk {
 		}
 	}
 
+	byte[] searchTable(long index)
+	{
+		int head = 1;
+		int tail = mixedCharsetTable.length;
+
+		while(head<tail)
+		{
+			int mid = (head+tail)/2;
+			long lastValue = ByteBuffer.wrap(mixedCharsetTable[mid-1], 0, 8).getLong();
+			long value = ByteBuffer.wrap(mixedCharsetTable[mid], 0, 8).getLong();			
+			if(index>=lastValue && index<value)
+			{
+				return Arrays.copyOfRange(mixedCharsetTable[mid], 8, mixedCharsetTable[mid].length);
+			}
+			else if(index<lastValue)
+			{
+				tail = mid;
+			}
+			else head = mid+1;
+		}
+		return null;
+	}
+	
+	int[] getCombination(int k, int n, int no)
+	{
+        int[] array = new int[k];
+        for(int i=0; i<k; i++) array[i] = i;
+        for(int i=0; i<no; i++)
+        {
+            int num = k-1;
+            while(array[num]==num+n-k) num--;
+            array[num]++;
+            for(int j=num+1; j<k; j++)
+            {
+                array[j] = array[j-1]+1;
+            }
+        }		
+        return array;
+	}
+	
+	void indexToPlain_Mixed()
+	{
+		//lookup the table to get plain length of each charset
+		byte[] plainLength = searchTable(index);
+		int[] plainLengthTotal = new int[plainLength.length-1];
+		plainLengthTotal[plainLengthTotal.length-1] = plainLength[plainLengthTotal.length]+plainLength[plainLengthTotal.length-1];
+		for(int i=plainLengthTotal.length-2; i>=0; i--)
+		{
+			plainLengthTotal[i] = plainLengthTotal[i+1]+plainLength[i];
+		}
+		
+		//fill in the plain
+		plain = new byte[plainLengthTotal[0]];
+		for(int i=0; i<plainLength.length-1; i++)
+		{
+			int com = RainbowCalcTools.combination(plainLength[i], plainLengthTotal[i]);
+			int[] order = getCombination((int)plainLength[i], plainLengthTotal[i], (int)(index%com));
+			index /= com;
+			for(int j=order.length-1; j>=0; j--)
+			{
+				int pos = 0;
+				int count = 0;
+				while(count<order[j] || plain[pos]!=0)
+				{
+					if(plain[pos]==0) count++;
+					pos++;
+				}
+				plain[pos] = charset[i][(int)(index%charset[i].length)];
+				index /= charset[i].length;
+			}
+		}
+		for(int i=plain.length-1; i>=0; i--)
+		{
+			if(plain[i]==0)
+			{
+				plain[i] = charset[plainLength.length-1][(int)(index%charset[plainLength.length-1].length)];
+				index /= charset[plainLength.length-1].length;
+			}
+		}
+ 	}
+	
 	void plainToHash() throws NoSuchAlgorithmException, IllegalArgumentException, UnsupportedEncodingException {
 		if(alg.equalsIgnoreCase("ntlm")) 
 		{
@@ -353,37 +516,37 @@ public class RainbowChainWalk {
 		}		
 	}
 	
-	public static void main(String args[]) throws IOException, NoSuchAlgorithmException {
-//		long start = System.currentTimeMillis();
-//		rainbowTableGenerate("md5","loweralpha#3#numeric#2",0,2400,10000);
-
-		RainbowChainWalk rcw = new RainbowChainWalk("ntlm","numeric#3#loweralpha#0-1",0);
-		int chainLen = 101;
-		int chainCnt = 1000;
+	public static void main(String args[]) throws Exception
+	{
+		RainbowChainWalk rcw = new RainbowChainWalk("ntlm","(loweralpha#0-3#numeric#0-10)",0);
+		int chainLen = 400001;
+		long chainCnt = 200000000000l;
+		long start = System.currentTimeMillis();
 		
 //		long[][] rainbowTable = RainbowCrack.loadRainbowTable("ntlm_alpha#1-2#numeric#1-3_0_1000x20000.rtE");
-//		rcw = new RainbowChainWalk("sha1", "loweralpha#2#numeric#1#mixalpha-numeric-all-space#1", 0);
-		long[][] rainbowTable = rcw.getRainbowTable(chainLen, chainCnt, true, false);
+//		long[][] rainbowTable = rcw.getRainbowTable(chainLen, chainCnt, true, false);
 //		rcw.showMatrix(rainbowTable, chainLen);
-//		
+		
 		System.out.println("TotalSpace: "+rcw.plainSpaceTotal);
 		System.out.println("WorkFactor: "+(double)(chainLen-1)*chainCnt/rcw.plainSpaceTotal);
 		System.out.println("ExpectedUniqueChains: "+chainCnt/((double)(chainLen-1)*chainCnt/rcw.plainSpaceTotal/2+1));
 		System.out.println("Success Rate: "+RainbowCalcTools.successRate2(rcw.plainSpaceTotal, chainCnt, chainLen, 1));
-//		
-		int count = 0;
-		BufferedReader file = new BufferedReader(new FileReader("ntlm_hash_numeric#3#loweralpha#0-1.txt"));
-		String hash = file.readLine();
-		while(hash!=null){
-			String plain = rcw.recover(rainbowTable, chainLen, hash);
-			if(plain!=null) 
-				{
-				System.out.println("Plain: "+plain);
-				count++;
-				}
-		hash = file.readLine();
-		}
-		System.out.println(count);
+	
+		String hash = "41E184179CF53EC4D2CCF08950226A4B";
+//		rcw.recover(rainbowTable, chainLen, hash);
+//		int count = 0;
+//		BufferedReader file = new BufferedReader(new FileReader("ntlm_hash_numeric#3#loweralpha#0-1.txt"));
+//		String hash = file.readLine();
+//		while(hash!=null){
+//			String plain = rcw.recover(rainbowTable, chainLen, hash);
+//			if(plain!=null) 
+//				{
+//				System.out.println("Plain: "+plain);
+//				count++;
+//				}
+//		hash = file.readLine();
+//		}
+//		System.out.println(count);
 
 //		RainbowTableGeneration.rainbowTableGenerate("md5", "loweralpha#2#numeric#2", 5, 200, 200);
 //		RainbowCrack.rainbowCrack("md5_loweralpha#2#numeric#2_0_200x200.rtE", "md5Hash.txt");
@@ -392,31 +555,20 @@ public class RainbowChainWalk {
 //		RainbowCrack.rainbowCrack("md5_loweralpha#2#numeric#2_3_200x200.rtE", "md5Hash.txt");
 //		RainbowCrack.rainbowCrack("md5_loweralpha#2#numeric#2_4_200x200.rtE", "md5Hash.txt");
 	
-		
-		
 //		System.out.println("time: "+(System.currentTimeMillis()-start));
 		
-		int uniqueChain = 1;
-		for(int i=1; i<rainbowTable.length; i++)
-		{
-			if(rainbowTable[i-1][1]!=rainbowTable[i][1])
-			{	
-				uniqueChain++;
-			}
-		}
-		System.out.println("UniqueChains: "+uniqueChain);
-		System.out.println("UniqueChainsPercentage: "+(float)uniqueChain/chainCnt);
-		
-	
-//		BufferedWriter out = new BufferedWriter(new FileWriter("md5_loweralpha#3#numeric#2_0_2400x10000"));
-//		for(long[] l:rainbowTable)
+//		int uniqueChain = 1;
+//		for(int i=1; i<rainbowTable.length; i++)
 //		{
-//			out.write(l[0]+"\t");
-//			out.write(l[1]+"\n");
-//		}	
-//		out.close();
+//			if(rainbowTable[i-1][1]!=rainbowTable[i][1])
+//			{	
+//				uniqueChain++;
+//			}
+//		}
+//		System.out.println("UniqueChains: "+uniqueChain);
+//		System.out.println("UniqueChainsPercentage: "+(float)uniqueChain/chainCnt);
 		
-//		System.out.println("time: "+(System.currentTimeMillis()-start));
+		System.out.println("time: "+(System.currentTimeMillis()-start));
 	}
 
 }

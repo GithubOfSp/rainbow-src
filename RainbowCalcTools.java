@@ -151,6 +151,30 @@ public class RainbowCalcTools {
 		return 1-Math.pow(Math.exp(-(double)m/N), t);
 	}
 	
+	public static int combination(int m, int n)
+	{
+		if(m>n)
+		{
+			m ^= n;
+			n ^= m;
+			m ^= n;
+		}
+		long ret = 1;
+		for(int i=0; i<m; i++)
+		{
+			ret *= n--;
+			ret /= i+1;
+		}
+		return (int)ret;
+	}
+	
+	public static long factorial(byte n)
+	{
+		long ret = 1;
+		for(int i=2; i<=n; i++) ret *= i;
+		return ret;
+	}
+	
 	public static void main(String[] args) throws NoSuchAlgorithmException
 	{
 		System.out.println(successRate(10000, 1, 30000, 1));
