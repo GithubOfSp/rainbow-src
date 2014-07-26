@@ -1,4 +1,5 @@
 import java.io.BufferedOutputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -6,6 +7,7 @@ import java.nio.ByteOrder;
 import java.security.NoSuchAlgorithmException;
 import java.text.DateFormat;
 import java.util.Date;
+import java.util.LinkedList;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -39,12 +41,12 @@ public class RainbowTableGeneration {
 		quickSort(r,t+1,tail);
 	}
 	
-	public static void rainbowTableGenerate(final String alg, final String charset, final int tableCnt, final int chainLen, final long chainCnt) throws NoSuchAlgorithmException, IllegalArgumentException, IOException
-	{
+	public static void rainbowTableGenerate(final String alg, final String charset, final int tableCnt, final int chainLen, final long chainCnt, final int threads) throws Exception
+	{		
 		System.out.println("----------RainbowTableGenerate---------");
 		System.out.println("Started at "+new Date());
-		Timer t = new Timer();
 		final int[] param = new int[3];
+		Timer t = new Timer();
 		final int interval = 5000;
 		final DateFormat time = DateFormat.getTimeInstance();
 		t.schedule(new TimerTask()
@@ -52,34 +54,71 @@ public class RainbowTableGeneration {
 			public void run()
 			{
 				if(param[1]<param[2]) param[2] -= chainCnt;
-				System.out.println(time.format(new Date())+"\t"+alg+"_"+charset+"_"+param[0]+"_"+chainLen+"x"+chainCnt+".rtE\t"+param[1]+"/"+chainCnt+"\t"+(param[1]-param[2])*chainLen/(interval/1000)+" links/s"+"\t"+(double)(param[0]*chainCnt+param[1])*100/(chainCnt*tableCnt)+"%");
+				System.out.println(time.format(new Date())+"\t"+alg+"_"+charset+"_"+param[0]+"_"+chainLen+"x"+chainCnt+".rtE\t"+param[1]+"/"+chainCnt+"\t"+(param[1]-param[2])*chainLen/(interval/1000)+" links/s"+"\t"+String.format("%.2f", (double)(param[0]*chainCnt+param[1])*100/(chainCnt*tableCnt))+"%");
 				param[2] = param[1];
 			}
 		}, interval, interval);
 		
+		class GenThread implements Runnable
+		{
+			int tableIndex;
+			int number;
+			GenThread(int tableIndex, int threadNumber)
+			{
+				this.tableIndex = tableIndex;
+				this.number = threadNumber;
+			}
+			public void run()
+			{
+				try {
+					RainbowChainWalk rcw = new RainbowChainWalk(alg, charset, tableIndex);
+					BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(alg+"_"+charset+"_"+tableIndex+"_"+chainLen+"x"+chainCnt+(threads==1?"":"_thread"+number)+".rtE"));
+					for(long i=number; i<chainCnt; i+=threads)
+					{
+						out.write(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(i).array());
+						out.write(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(rcw.getIndex(i,0,chainLen-1)).array());
+						param[1]++;
+					}
+					out.close();
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}	
+		
+		LinkedList<Thread> list = new LinkedList<Thread>();
 		for(int tableIndex=0; tableIndex<tableCnt; tableIndex++)
 		{
 			param[0] = tableIndex;
-			RainbowChainWalk rcw = new RainbowChainWalk(alg, charset, tableIndex);
-			BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(alg+"_"+charset+"_"+tableIndex+"_"+chainLen+"x"+chainCnt+".rtE"));
-			for(long i=0; i<chainCnt; i++)
+			param[1] = 0;
+			for(int i=0; i<threads; i++)
 			{
-//				if(chainCnt%100==0) System.out.println(alg+"_"+charset+"_"+tableIndex+"_"+chainLen+"x"+chainCnt+".rtE : "+i+"/");
-				param[1] = (int)i;
-				out.write(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(i).array());
-				out.write(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(rcw.getIndex(i,0,chainLen-1)).array());
+				Thread thread = new Thread(new GenThread(tableIndex, i));
+				thread.start();
+				list.add(thread);
 			}
-			out.close();
+			boolean allThreadsFinished = false;
+			while(!allThreadsFinished)
+			{
+				for(Thread thread:list)
+				{
+					if(thread.isAlive()) break;
+					allThreadsFinished = true;
+				}
+				Thread.sleep(100);
+			}
+			list.clear();
 		}
 		
 		System.out.println("Finished at "+new Date());
 		t.cancel();
 	}
 	
-	public static void main(String[] args) throws NoSuchAlgorithmException, IllegalArgumentException, IOException
+	public static void main(String[] args) throws Exception
 	{
 //		RainbowChainWalk rcw = new RainbowChainWalk("ntlm", "alpha#1#numeric#3#loweralpha#1#all#1", 0);
 //		System.out.println(RainbowCalcTools.successRate2(rcw.plainSpaceTotal, 20000, 5000, 4));
-		rainbowTableGenerate("ntlm", "alpha-numeric-space#0-3#numeric#1-3", 1, 1000, 400000);
+		rainbowTableGenerate("ntlm", "alpha-numeric-space#0-3#numeric#1-3", 3, 1000, 80000, 3);
 	}
 }

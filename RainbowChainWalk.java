@@ -39,6 +39,11 @@ public class RainbowChainWalk {
 
 	static class NoSuchCharsetException extends Exception
 	{
+		/**
+		 * 
+		 */
+		private static final long serialVersionUID = 1348334817840742944L;
+
 		public NoSuchCharsetException(String msg)
 		{
 			super(msg);
