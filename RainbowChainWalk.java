@@ -1,7 +1,5 @@
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -36,6 +34,7 @@ public class RainbowChainWalk {
 	static final String mixalpha_numeric_all= "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_+=~`[]{}|\\:;\"\'<>,.?/";
 	static final String mixalpha_numeric_symbol32_space= "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_+=~`[]{}|\\:;\"\'<>,.?/ ";
 	static final String mixalpha_numeric_all_space= "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_+=~`[]{}|\\:;\"\'<>,.?/ ";
+	static final String symbol= "!@#$%^&*()-_+=~`[]{}|\\:;\"\'<>,.?/";
 
 	static class NoSuchCharsetException extends Exception
 	{
@@ -81,6 +80,7 @@ public class RainbowChainWalk {
 	    else if(charset.equalsIgnoreCase("mixalpha-numeric-all")) return mixalpha_numeric_all.getBytes();
 	    else if(charset.equalsIgnoreCase("mixalpha-numeric-symbol32-space")) return mixalpha_numeric_symbol32_space.getBytes();
 	    else if(charset.equalsIgnoreCase("mixalpha-numeric-all-space")) return mixalpha_numeric_all_space.getBytes();
+	    else if(charset.equalsIgnoreCase("symbol")) return symbol.getBytes();
 	    else throw new NoSuchCharsetException(charset);
 	}
 	     
@@ -92,7 +92,9 @@ public class RainbowChainWalk {
 	int[] plainLenMax = null;	
 	long plainSpaceTotal = 0;
 	long[] partPlainSpaceTotal = null;
+	BigInteger[] bigPartPlainSpaceTotal = null;
 	long[][] plainSpaceUpToX = null;
+	BigInteger[][] bigPlainSpaceUpToX = null;
 	
 	String alg;
 	MessageDigest digest;	
@@ -131,7 +133,9 @@ public class RainbowChainWalk {
 		plainLenMin = new int[parts];
 		plainLenMax = new int[parts];
 		plainSpaceUpToX = new long[parts][];
+		bigPlainSpaceUpToX = new BigInteger[parts][];
 		partPlainSpaceTotal = new long[parts];
+		bigPartPlainSpaceTotal = new BigInteger[parts];
 		for(int i=0; i<charsetParse.length/2; i++)
 		{
 			this.charset[i] = getCharsetBytes(charsetParse[2*i]);
@@ -143,6 +147,11 @@ public class RainbowChainWalk {
 			plainLenMin[i] = Integer.valueOf(plainLenParse[0]);
 			plainLenMax[i] = plainLenParse.length==2?Integer.valueOf(plainLenParse[1]):plainLenMin[i];
 			plainSpaceUpToX[i] = new long[plainLenMax[i]-plainLenMin[i]+1];
+			bigPlainSpaceUpToX[i] = new BigInteger[plainLenMax[i]-plainLenMin[i]+1];
+			for(int j=0; j<bigPlainSpaceUpToX[i].length; j++)
+			{
+				bigPlainSpaceUpToX[i][j] = new BigInteger("0");
+			}
 		}
 		if(FixedPlainLen==true)
 		{
@@ -162,35 +171,59 @@ public class RainbowChainWalk {
 		}
 	}
 	
-	void calcPlainSpaceTotal() {
-		if(FixedPlainLen==true)
+	static class PlainSpaceExceededException extends Exception
+	{
+		private static final long serialVersionUID = -4999915602818968755L;
+		PlainSpaceExceededException(String msg)
 		{
-			plainSpaceTotal = 1;
-			for(int i=0; i<charsetFixed.length; i++)
-			{
-				plainSpaceTotal *= charsetFixed[i].length;
-			}
-			return;
-		}
-		for(int i=0; i<this.charset.length; i++)
-		{
-			long spaceSize = (long)Math.pow(this.charset[i].length, plainLenMin[i]);
-			for(int j=plainLenMin[i]; j<plainLenMax[i]; j++)
-			{
-				plainSpaceUpToX[i][j-plainLenMin[i]+1] = plainSpaceUpToX[i][j-plainLenMin[i]]+spaceSize;
-				spaceSize *= this.charset[i].length;
-			}
-			partPlainSpaceTotal[i] = plainSpaceUpToX[i][plainLenMax[i]-plainLenMin[i]]+spaceSize;
-		}
-		plainSpaceTotal = 1;
-		for(long i:partPlainSpaceTotal)
-		{
-			plainSpaceTotal *= i;
+			super(msg);
 		}
 	}
 	
-	byte[][] mixedCharsetTable;
-	void calcPlainSpaceTotal_Mixed()//assume there is no duplicates in charsets
+	void calcPlainSpaceTotal() throws PlainSpaceExceededException {
+		plainSpaceTotal = 1;
+		BigInteger bigPlainSpaceTotal = new BigInteger("1");
+		if(FixedPlainLen==true)
+		{
+			for(int i=0; i<charsetFixed.length; i++)
+			{
+				plainSpaceTotal *= charsetFixed[i].length;
+				bigPlainSpaceTotal.multiply(new BigInteger(String.valueOf(charsetFixed[i].length)));
+			}
+		}
+		else
+		{
+			for(int i=0; i<this.charset.length; i++)
+			{
+				long spaceSize = (long)Math.pow(this.charset[i].length, plainLenMin[i]);
+				BigInteger bigSpaceSize = new BigInteger(String.valueOf(this.charset[i].length)).pow(plainLenMin[i]); 
+				for(int j=plainLenMin[i]; j<plainLenMax[i]; j++)
+				{
+					plainSpaceUpToX[i][j-plainLenMin[i]+1] = plainSpaceUpToX[i][j-plainLenMin[i]]+spaceSize;
+					bigPlainSpaceUpToX[i][j-plainLenMin[i]+1] = bigPlainSpaceUpToX[i][j-plainLenMin[i]].add(bigSpaceSize);
+					spaceSize *= this.charset[i].length;
+					bigSpaceSize = bigSpaceSize.multiply(new BigInteger(String.valueOf(this.charset[i].length)));
+				}
+				partPlainSpaceTotal[i] = plainSpaceUpToX[i][plainLenMax[i]-plainLenMin[i]]+spaceSize;
+				bigPartPlainSpaceTotal[i] = bigPlainSpaceUpToX[i][plainLenMax[i]-plainLenMin[i]].add(bigSpaceSize);
+			}
+			for(long i:partPlainSpaceTotal)
+			{
+				plainSpaceTotal *= i;
+			}
+			for(BigInteger i:bigPartPlainSpaceTotal)
+			{
+				bigPlainSpaceTotal = bigPlainSpaceTotal.multiply(i);
+			}
+		}
+		if(bigPlainSpaceTotal.compareTo(new BigInteger(String.valueOf(Long.MAX_VALUE)))>0)
+		{
+			throw new PlainSpaceExceededException("plainSpaceTotal: "+bigPlainSpaceTotal.toString());
+		}
+	}
+	
+	byte[][] mixedCharsetTable; //for the lookup of the length of each plain part corresponding to a certain index
+	void calcPlainSpaceTotal_Mixed() throws PlainSpaceExceededException
 	{
 		//initial table
 		int tableSize = 1;
@@ -208,6 +241,7 @@ public class RainbowChainWalk {
 			spaceSize[i] = (long)Math.pow(charset[i].length, plainLength[i]);
 		}
 		plainSpaceTotal = 0;
+		BigInteger bigPlainSpaceTotal = new BigInteger("0");
 		
 		//combination of different plain length
 		boolean hasNext = true;
@@ -215,7 +249,12 @@ public class RainbowChainWalk {
 		{
 			//calculate plain space size of current combination
 			long totalSize = 1;
-			for(long l:spaceSize) totalSize *= l;
+			BigInteger bigTotalSize = new BigInteger("1");
+			for(long l:spaceSize)
+			{
+				totalSize *= l;
+				bigTotalSize = bigTotalSize.multiply(new BigInteger(String.valueOf(l)));
+			}
 			int n = plainLength[0];
 			for(int i=1; i<plainLength.length; i++)
 			{
@@ -223,8 +262,14 @@ public class RainbowChainWalk {
 				n += m;
 				int com = RainbowCalcTools.combination(m, n);
 				totalSize *= com;
+				bigTotalSize = bigTotalSize.multiply(new BigInteger(String.valueOf(com)));
 			}
 			plainSpaceTotal += totalSize;
+			bigPlainSpaceTotal = bigPlainSpaceTotal.add(bigTotalSize);
+			if(bigPlainSpaceTotal.compareTo(new BigInteger(String.valueOf(Long.MAX_VALUE)))>0)
+			{
+				throw new PlainSpaceExceededException("spaceSize:"+Arrays.toString(spaceSize)+" plainLength:"+Arrays.toString(plainLength)+" totalSize:"+bigTotalSize);
+			}
 
 			//fill in a row of table: total plain space + each plain length of current combination
 			mixedCharsetTable[tableIndex] = new byte[8+plainLength.length];
@@ -308,7 +353,6 @@ public class RainbowChainWalk {
 	{
 		int head = 1;
 		int tail = mixedCharsetTable.length;
-
 		while(head<tail)
 		{
 			int mid = (head+tail)/2;
@@ -327,7 +371,7 @@ public class RainbowChainWalk {
 		return null;
 	}
 	
-	int[] getCombination(int k, int n, int no)
+	int[] getCombinationOrder(int k, int n, int no)
 	{
         int[] array = new int[k];
         for(int i=0; i<k; i++) array[i] = i;
@@ -346,7 +390,7 @@ public class RainbowChainWalk {
 	
 	void indexToPlain_Mixed()
 	{
-		//lookup the table to get plain length of each charset
+		//table lookup for getting the plain length of each charset
 		byte[] plainLength = searchTable(index);
 		int[] plainLengthTotal = new int[plainLength.length-1];
 		plainLengthTotal[plainLengthTotal.length-1] = plainLength[plainLengthTotal.length]+plainLength[plainLengthTotal.length-1];
@@ -360,7 +404,7 @@ public class RainbowChainWalk {
 		for(int i=0; i<plainLength.length-1; i++)
 		{
 			int com = RainbowCalcTools.combination(plainLength[i], plainLengthTotal[i]);
-			int[] order = getCombination((int)plainLength[i], plainLengthTotal[i], (int)(index%com));
+			int[] order = getCombinationOrder((int)plainLength[i], plainLengthTotal[i], (int)(index%com));
 			index /= com;
 			for(int j=order.length-1; j>=0; j--)
 			{
@@ -375,7 +419,7 @@ public class RainbowChainWalk {
 				index /= charset[i].length;
 			}
 		}
-		for(int i=plain.length-1; i>=0; i--)
+		for(int i=plain.length-1; i>=0; i--) //fill in the last plain part whose position order is fixed
 		{
 			if(plain[i]==0)
 			{
@@ -523,11 +567,12 @@ public class RainbowChainWalk {
 	
 	public static void main(String args[]) throws Exception
 	{
-		RainbowChainWalk rcw = new RainbowChainWalk("ntlm","(loweralpha#0-3#numeric#0-10)",0);
-		int chainLen = 400001;
-		long chainCnt = 200000000000l;
+		RainbowChainWalk rcw = new RainbowChainWalk("ntlm","loweralpha#1-7#numeric#1-8",0);
+		int chainLen = 20309;
+		long chainCnt = 10999796900l;
 		long start = System.currentTimeMillis();
 		
+//		System.out.println((double)17400*1050000000/100000000l/3600);
 //		long[][] rainbowTable = RainbowCrack.loadRainbowTable("ntlm_alpha#1-2#numeric#1-3_0_1000x20000.rtE");
 //		long[][] rainbowTable = rcw.getRainbowTable(chainLen, chainCnt, true, false);
 //		rcw.showMatrix(rainbowTable, chainLen);
