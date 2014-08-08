@@ -3,9 +3,12 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
 
 public class RainbowChainWalk {
 	static final String alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -86,6 +89,7 @@ public class RainbowChainWalk {
 	     
 	boolean FixedPlainLen = true;
 	boolean MixedCharset = false;
+	boolean PermutedCharset = false;
 	byte[][] charset = null;
 	byte[][] charsetFixed = null;
 	int[] plainLenMin = null;
@@ -120,10 +124,17 @@ public class RainbowChainWalk {
 	
 	void setCharset(String charset) throws Exception
 	{
+		if(charset.startsWith("["))
+		{
+			if(!charset.endsWith("]")) throw new Exception("charset format error, \""+charset+"\".");
+			MixedCharset = true;
+			FixedPlainLen = false;
+			charset = charset.substring(1, charset.length()-1);
+		}
 		if(charset.startsWith("("))
 		{
-			if(!charset.endsWith(")")) throw new Exception("charset format error, \""+charset+"\"");
-			MixedCharset = true;
+			if(!charset.endsWith(")")) throw new Exception("charset format error, \""+charset+"\".");
+			PermutedCharset = true;
 			FixedPlainLen = false;
 			charset = charset.substring(1, charset.length()-1);
 		}
@@ -145,6 +156,7 @@ public class RainbowChainWalk {
 				FixedPlainLen = false;
 			}
 			plainLenMin[i] = Integer.valueOf(plainLenParse[0]);
+			if(plainLenMin[i]<0 || PermutedCharset && plainLenMin[i]==0) throw new Exception("charset min length illegal, \""+charset+"\".");
 			plainLenMax[i] = plainLenParse.length==2?Integer.valueOf(plainLenParse[1]):plainLenMin[i];
 			plainSpaceUpToX[i] = new long[plainLenMax[i]-plainLenMin[i]+1];
 			bigPlainSpaceUpToX[i] = new BigInteger[plainLenMax[i]-plainLenMin[i]+1];
@@ -214,6 +226,14 @@ public class RainbowChainWalk {
 			for(BigInteger i:bigPartPlainSpaceTotal)
 			{
 				bigPlainSpaceTotal = bigPlainSpaceTotal.multiply(i);
+			}
+			if(PermutedCharset)
+			{
+				for(int i=1; i<=charset.length; i++)
+				{
+					plainSpaceTotal *= i;
+					bigPlainSpaceTotal = bigPlainSpaceTotal.multiply(new BigInteger(String.valueOf(i)));
+				}
 			}
 		}
 		if(bigPlainSpaceTotal.compareTo(new BigInteger(String.valueOf(Long.MAX_VALUE)))>0)
@@ -326,18 +346,36 @@ public class RainbowChainWalk {
 				index /= charsetFixed[i].length;
 			}
 		}
+		else if(PermutedCharset)
+		{
+			List<byte[]> plain = new LinkedList<byte[]>();
+			int length = 0;
+			for(int i=0; i<charset.length; i++)
+			{
+				plain.add(primaryIndexToPlain(i, index%partPlainSpaceTotal[i]));
+				index /= partPlainSpaceTotal[i];
+				length += plain.get(i).length;
+			}
+			this.plain = new byte[length];			
+			length = 0;
+			for(int i=charset.length; i>1; i--)
+			{
+				byte[] temp = plain.remove((int)(index%i));
+				System.arraycopy(temp, 0, this.plain, length, temp.length);
+				length += temp.length;
+				index /= i;
+			}
+			System.arraycopy(plain.get(0), 0, this.plain, length, plain.get(0).length);
+		}
 		else
 		{
 			byte[][] plain = new byte[charset.length][];
+			int length = 0;
 			for(int i=charset.length-1; i>=0; i--)
 			{
 				plain[i] = primaryIndexToPlain(i, index%partPlainSpaceTotal[i]);
 				index /= partPlainSpaceTotal[i];
-			}
-			int length = 0;
-			for(byte[] b:plain)
-			{
-				length += b.length;
+				length += plain[i].length;
 			}
 			this.plain = new byte[length];
 			length = 0;
@@ -567,7 +605,21 @@ public class RainbowChainWalk {
 	
 	public static void main(String args[]) throws Exception
 	{
-		RainbowChainWalk rcw = new RainbowChainWalk("ntlm","loweralpha#1-7#numeric#1-8",0);
+		RainbowChainWalk[] rcw = new RainbowChainWalk[10];
+		rcw[0] = new RainbowChainWalk("ntlm","mixalpha-numeric-all#1-9",0);
+		rcw[1] = new RainbowChainWalk("ntlm","[loweralpha#2#numeric#2#symbol#2#alpha#2]",0);
+		rcw[2] = new RainbowChainWalk("ntlm","[loweralpha#2#numeric#3-4#symbol#1#alpha#2]",0);
+		rcw[3] = new RainbowChainWalk("ntlm","[loweralpha#3#numeric#3-4#symbol#1#alpha#1]",0);
+		rcw[4] = new RainbowChainWalk("ntlm","[loweralpha#3#numeric#1#symbol#1#alpha#3]",0);
+		rcw[5] = new RainbowChainWalk("ntlm","mixalpha-numeric-all#1-9",0);
+		rcw[6] = new RainbowChainWalk("ntlm","[loweralpha#1#numeric#1-6#symbol#1#alpha#1]",0);
+		rcw[7] = new RainbowChainWalk("ntlm","(loweralpha#2-3#numeric#3-4#symbol#1#alpha#1)",0);
+		rcw[8] = new RainbowChainWalk("ntlm","(loweralpha#1-3#numeric#1#symbol#1#alpha#2-3)",0);
+		rcw[9] = new RainbowChainWalk("ntlm","(loweralpha#4#numeric#1-3#symbol#1#alpha#1)",0);
+		//		for(int i=0; i<54000; i++)
+//		{
+//			System.out.println(rcw[4].getPlain(i));
+//		}
 		int chainLen = 20309;
 		long chainCnt = 10999796900l;
 		long start = System.currentTimeMillis();
@@ -577,10 +629,11 @@ public class RainbowChainWalk {
 //		long[][] rainbowTable = rcw.getRainbowTable(chainLen, chainCnt, true, false);
 //		rcw.showMatrix(rainbowTable, chainLen);
 		
-		System.out.println("TotalSpace: "+rcw.plainSpaceTotal);
-		System.out.println("WorkFactor: "+(double)(chainLen-1)*chainCnt/rcw.plainSpaceTotal);
-		System.out.println("ExpectedUniqueChains: "+chainCnt/((double)(chainLen-1)*chainCnt/rcw.plainSpaceTotal/2+1));
-		System.out.println("Success Rate: "+RainbowCalcTools.successRate2(rcw.plainSpaceTotal, chainCnt, chainLen, 1));
+		for(int i=0; i<10; i++)
+		System.out.println("TotalSpace: "+rcw[i].plainSpaceTotal+" "+new DecimalFormat("0.00E0").format(rcw[i].plainSpaceTotal));
+//		System.out.println("WorkFactor: "+(double)(chainLen-1)*chainCnt/rcw.plainSpaceTotal);
+//		System.out.println("ExpectedUniqueChains: "+chainCnt/((double)(chainLen-1)*chainCnt/rcw.plainSpaceTotal/2+1));
+//		System.out.println("Success Rate: "+RainbowCalcTools.successRate2(rcw.plainSpaceTotal, chainCnt, chainLen, 1));
 	
 		String hash = "41E184179CF53EC4D2CCF08950226A4B";
 //		rcw.recover(rainbowTable, chainLen, hash);
