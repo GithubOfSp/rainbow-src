@@ -1,10 +1,8 @@
 import java.io.BufferedOutputStream;
-import java.io.FileNotFoundException;
+import java.io.BufferedWriter;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.security.NoSuchAlgorithmException;
 import java.text.DateFormat;
 import java.util.Date;
 import java.util.LinkedList;
@@ -63,23 +61,27 @@ public class RainbowTableGeneration {
 		{
 			int tableIndex;
 			int number;
-			GenThread(int tableIndex, int threadNumber)
+			BufferedOutputStream out;
+			GenThread(int tableIndex, int threadNumber, BufferedOutputStream out)
 			{
 				this.tableIndex = tableIndex;
 				this.number = threadNumber;
+				this.out = out;
 			}
 			public void run()
 			{
 				try {
 					RainbowChainWalk rcw = new RainbowChainWalk(alg, charset, tableIndex);
-					BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(alg+"_"+charset+"_"+tableIndex+"_"+chainLen+"x"+chainCnt+(threads==1?"":"_thread"+number)+".rtE"));
 					for(long i=number; i<chainCnt; i+=threads)
 					{
-						out.write(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(i).array());
-						out.write(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(rcw.getIndex(i,0,chainLen-1)).array());
+						long endpoint = rcw.getIndex(i,0,chainLen-1);
+						synchronized(out)
+						{
+							out.write(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(i).array());
+							out.write(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(endpoint).array());
+						}
 						param[1]++;
 					}
-					out.close();
 				} catch (Exception e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -88,29 +90,31 @@ public class RainbowTableGeneration {
 		}	
 		
 		LinkedList<Thread> list = new LinkedList<Thread>();
+		BufferedOutputStream out;
 		for(int tableIndex=0; tableIndex<tableCnt; tableIndex++)
 		{
 			param[0] = tableIndex;
 			param[1] = 0;
+			out = new BufferedOutputStream(new FileOutputStream(alg+"_"+charset+"_"+tableIndex+"_"+chainLen+"x"+chainCnt+".rtE", true));
 			for(int i=0; i<threads; i++)
 			{
-				Thread thread = new Thread(new GenThread(tableIndex, i));
+				Thread thread = new Thread(new GenThread(tableIndex, i, out));
 				thread.start();
 				list.add(thread);
 			}
 			boolean allThreadsFinished = false;
 			while(!allThreadsFinished)
 			{
+				allThreadsFinished = true;
 				for(Thread thread:list)
 				{
-					if(thread.isAlive()) break;
-					allThreadsFinished = true;
+					allThreadsFinished &= !thread.isAlive();
 				}
 				Thread.sleep(100);
 			}
+			out.close();
 			list.clear();
 		}
-		
 		System.out.println("Finished at "+new Date());
 		t.cancel();
 	}
@@ -119,6 +123,6 @@ public class RainbowTableGeneration {
 	{
 //		RainbowChainWalk rcw = new RainbowChainWalk("ntlm", "alpha#1#numeric#3#loweralpha#1#all#1", 0);
 //		System.out.println(RainbowCalcTools.successRate2(rcw.plainSpaceTotal, 20000, 5000, 4));
-		rainbowTableGenerate("ntlm", "alpha-numeric-space#0-8", 1, 10000, 800000, 3);
+		rainbowTableGenerate("ntlm", "alpha-numeric-space#0-8", 1, 1000, 80000, 3);
 	}
 }
