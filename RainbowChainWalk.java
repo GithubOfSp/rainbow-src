@@ -1,3 +1,5 @@
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -6,9 +8,11 @@ import java.security.NoSuchAlgorithmException;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.PriorityQueue;
 
 public class RainbowChainWalk {
 	static final String alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -38,6 +42,8 @@ public class RainbowChainWalk {
 	static final String mixalpha_numeric_symbol32_space= "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_+=~`[]{}|\\:;\"\'<>,.?/ ";
 	static final String mixalpha_numeric_all_space= "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_+=~`[]{}|\\:;\"\'<>,.?/ ";
 	static final String symbol= "!@#$%^&*()-_+=~`[]{}|\\:;\"\'<>,.?/";
+	static final String frequent1= "10238a9n@i5es64o7.!rwhgAduly_cLWSmztx*ZHC";
+	static final String frequent2= "YqPjNXQ#IbMJD-GfpETO$BkFUv&K+R%?/)V=^(~ ;,`:><\'[]\\}\"{|";
 
 	static class NoSuchCharsetException extends Exception
 	{
@@ -84,6 +90,8 @@ public class RainbowChainWalk {
 	    else if(charset.equalsIgnoreCase("mixalpha-numeric-symbol32-space")) return mixalpha_numeric_symbol32_space.getBytes();
 	    else if(charset.equalsIgnoreCase("mixalpha-numeric-all-space")) return mixalpha_numeric_all_space.getBytes();
 	    else if(charset.equalsIgnoreCase("symbol")) return symbol.getBytes();
+	    else if(charset.equalsIgnoreCase("frequent1")) return frequent1.getBytes();
+	    else if(charset.equalsIgnoreCase("frequent2")) return frequent2.getBytes();
 	    else throw new NoSuchCharsetException(charset);
 	}
 	     
@@ -606,20 +614,48 @@ public class RainbowChainWalk {
 	public static void main(String args[]) throws Exception
 	{
 		RainbowChainWalk[] rcw = new RainbowChainWalk[10];
-		rcw[0] = new RainbowChainWalk("ntlm","mixalpha-numeric-all#1-9",0);
-		rcw[1] = new RainbowChainWalk("ntlm","[loweralpha#2#numeric#2#symbol#2#alpha#2]",0);
-		rcw[2] = new RainbowChainWalk("ntlm","[loweralpha#2#numeric#3-4#symbol#1#alpha#2]",0);
-		rcw[3] = new RainbowChainWalk("ntlm","[loweralpha#3#numeric#3-4#symbol#1#alpha#1]",0);
-		rcw[4] = new RainbowChainWalk("ntlm","[loweralpha#3#numeric#1#symbol#1#alpha#3]",0);
-		rcw[5] = new RainbowChainWalk("ntlm","mixalpha-numeric-all#1-9",0);
-		rcw[6] = new RainbowChainWalk("ntlm","[loweralpha#1#numeric#1-6#symbol#1#alpha#1]",0);
-		rcw[7] = new RainbowChainWalk("ntlm","(loweralpha#2-3#numeric#3-4#symbol#1#alpha#1)",0);
-		rcw[8] = new RainbowChainWalk("ntlm","(loweralpha#1-3#numeric#1#symbol#1#alpha#2-3)",0);
-		rcw[9] = new RainbowChainWalk("ntlm","(loweralpha#4#numeric#1-3#symbol#1#alpha#1)",0);
-		//		for(int i=0; i<54000; i++)
+		rcw[0] = new RainbowChainWalk("ntlm","mixalpha-numeric-symbol14#1-3",0);
+		rcw[1] = new RainbowChainWalk("ntlm","[frequent1#1-7#frequent2#2]",0);
+		rcw[2] = new RainbowChainWalk("ntlm","[loweralpha#3#numeric#1-6#symbol#1]",0);
+		rcw[3] = new RainbowChainWalk("ntlm","[loweralpha#3#numeric#1-4#symbol#2]",0);
+		rcw[4] = new RainbowChainWalk("ntlm","[loweralpha#4#numeric#1-4#symbol#1]",0);
+		rcw[5] = new RainbowChainWalk("ntlm","[loweralpha#5#numeric#1-3#symbol#1]",0);
+		rcw[6] = new RainbowChainWalk("ntlm","[loweralpha#6#numeric#1-2#symbol#1]",0);
+		rcw[7] = new RainbowChainWalk("ntlm","[loweralpha#3#numeric#1-3#symbol#3]",0);
+		rcw[8] = new RainbowChainWalk("ntlm","(loweralpha#5#numeric#1-4#symbol#1)",0);
+		rcw[9] = new RainbowChainWalk("ntlm","(loweralpha#6#numeric#1-3#symbol#1)",0);
+		
+		System.out.println((double)1000*4000/rcw[0].plainSpaceTotal*1002/2);
+//		Comparator<String> com = new Comparator<String>(){
+//			public int compare(String a, String b)
+//			{
+////				System.out.println(Arrays.toString(a.split(" ")));
+//				return -Integer.parseInt(a.split("    ")[1])+Integer.parseInt((b.split("    ")[1]));
+//			}
+//		};
+//		PriorityQueue<String> q = new PriorityQueue<String>(11, com); 
+//		BufferedReader in = new BufferedReader(new FileReader("temp"));
+//		String line = in.readLine();
+//		while(line != null)
 //		{
-//			System.out.println(rcw[4].getPlain(i));
+//			q.add(line);
+//			line = in.readLine();
 //		}
+//		for(int i=0; i<50; i++)
+//		{
+//			String temp = q.poll();
+//			String[] split = temp.split(" ");
+//			try
+//			{
+//				System.out.println(temp+"   "+new DecimalFormat("0.00E0").format(new RainbowChainWalk("ntlm","(loweralpha#"+split[0]+"#numeric#"+split[2]+"#symbol#"+split[3]+")",0).plainSpaceTotal));
+//			}
+//			catch(PlainSpaceExceededException e)
+//			{
+//				
+//			}
+//		}
+//		
+
 		int chainLen = 20309;
 		long chainCnt = 10999796900l;
 		long start = System.currentTimeMillis();

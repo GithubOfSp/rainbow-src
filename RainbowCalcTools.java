@@ -175,15 +175,20 @@ public class RainbowCalcTools {
 		return ret;
 	}
 	
+	public static double Rpc(double Rps, int l)
+	{
+		return 2*l*Math.pow(1-Rps, -(double)1/2/l)-2*l;
+	}
+	
 	public static void main(String[] args) throws NoSuchAlgorithmException
 	{
-		System.out.println(successRate(10000, 1, 30000, 1));
-		System.out.println(successRate2(10000, 1, 30000, 1));
+//		System.out.println(successRate(10000, 1, 30000, 1));
+//		System.out.println(successRate2(10000, 1, 30000, 1));
 //		RainbowChainWalk rcw = new RainbowChainWalk("md5", "loweralpha#6#numeric#3", 0);
-//		for(double i=0.0; i<5; i+=0.015625)
-//		{
-////			double i = 0.785;
-//			System.out.println(T_hr(i, 5));
-//		}
+		for(double i=0.5; i<1; i+=(double)1/64)
+		{
+//			double i = 0.785;
+			System.out.println(Rpc(i, 1));
+		}
 	}
 }
